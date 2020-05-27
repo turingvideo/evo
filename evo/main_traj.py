@@ -87,8 +87,14 @@ def parser():
     output_opts.add_argument("-p", "--plot", help="show plot window",
                              action="store_true")
     output_opts.add_argument(
+        "--plot_relative_time", action="store_true",
+        help="show timestamps relative to the start of the reference")
+    output_opts.add_argument(
         "--plot_mode", help="the axes for  plot projection", default="xyz",
         choices=["xy", "xz", "yx", "yz", "zx", "zy", "xyz"])
+    output_opts.add_argument(
+        "--ros_map_yaml", help="yaml file of an ROS 2D map image (.pgm/.png)"
+        " that will be drawn into the plot", default=None)
     output_opts.add_argument("--save_plot", help="path to save plot",
                              default=None)
     output_opts.add_argument("--serialize_plot",
@@ -323,7 +329,12 @@ def run(args):
     if args.n_to_align != -1 and not (args.align or args.correct_scale):
         die("--n_to_align is useless without --align or/and --correct_scale")
 
-    if args.sync or args.align or args.correct_scale or args.align_origin:
+    # TODO: this is fugly, but is a quick solution for remembering each synced
+    # reference when plotting pose correspondences later...
+    synced = (args.subcommand == "kitti" and ref_traj) or any(
+        (args.sync, args.align, args.correct_scale, args.align_origin))
+    synced_refs = {}
+    if synced:
         from evo.core import sync
         if not args.ref:
             logger.debug(SEP)
@@ -349,6 +360,8 @@ def run(args):
                 logger.debug("Aligning {}'s origin to reference.".format(name))
                 trajectories[name] = trajectory.align_trajectory_origin(
                     trajectories[name], ref_traj_tmp)
+            if SETTINGS.plot_pose_correspondences:
+                synced_refs[name] = ref_traj_tmp
 
     print_compact_name = not args.subcommand == "bag"
     for name, traj in trajectories.items():
@@ -374,7 +387,14 @@ def run(args):
         plot_mode = plot.PlotMode[args.plot_mode]
         ax_traj = plot.prepare_axis(fig_traj, plot_mode)
 
+        # for x-axis alignment starting from 0 with --plot_relative_time
+        start_time = None
+
         if args.ref:
+            if isinstance(ref_traj, trajectory.PoseTrajectory3D) \
+                    and args.plot_relative_time:
+                start_time = ref_traj.timestamps[0]
+
             short_traj_name = os.path.splitext(os.path.basename(args.ref))[0]
             if SETTINGS.plot_usetex:
                 short_traj_name = short_traj_name.replace("_", "\\_")
@@ -383,14 +403,21 @@ def run(args):
                       color=SETTINGS.plot_reference_color,
                       label=short_traj_name,
                       alpha=SETTINGS.plot_reference_alpha)
+            plot.draw_coordinate_axes(ax_traj, ref_traj, plot_mode,
+                                      SETTINGS.plot_axis_marker_scale)
             plot.traj_xyz(
                 axarr_xyz, ref_traj, style=SETTINGS.plot_reference_linestyle,
                 color=SETTINGS.plot_reference_color, label=short_traj_name,
-                alpha=SETTINGS.plot_reference_alpha)
+                alpha=SETTINGS.plot_reference_alpha,
+                start_timestamp=start_time)
             plot.traj_rpy(
                 axarr_rpy, ref_traj, style=SETTINGS.plot_reference_linestyle,
                 color=SETTINGS.plot_reference_color, label=short_traj_name,
-                alpha=SETTINGS.plot_reference_alpha)
+                alpha=SETTINGS.plot_reference_alpha,
+                start_timestamp=start_time)
+
+        if args.ros_map_yaml:
+            plot.ros_map(ax_traj, args.ros_map_yaml, plot_mode)
 
         cmap_colors = None
         if SETTINGS.plot_multi_cmap.lower() != "none":
@@ -411,10 +438,13 @@ def run(args):
             plot.traj(ax_traj, plot_mode, traj,
                       SETTINGS.plot_trajectory_linestyle, color,
                       short_traj_name, alpha=SETTINGS.plot_trajectory_alpha)
-            if args.ref and isinstance(ref_traj, trajectory.PoseTrajectory3D):
-                start_time = ref_traj.timestamps[0]
-            else:
-                start_time = None
+            plot.draw_coordinate_axes(ax_traj, traj, plot_mode,
+                                      SETTINGS.plot_axis_marker_scale)
+            if ref_traj and synced and SETTINGS.plot_pose_correspondences:
+                plot.draw_correspondence_edges(
+                    ax_traj, traj, synced_refs[name], plot_mode, color=color,
+                    style=SETTINGS.plot_pose_correspondences_linestyle,
+                    alpha=SETTINGS.plot_trajectory_alpha)
             plot.traj_xyz(axarr_xyz, traj, SETTINGS.plot_trajectory_linestyle,
                           color, short_traj_name,
                           alpha=SETTINGS.plot_trajectory_alpha,
@@ -423,8 +453,9 @@ def run(args):
                           color, short_traj_name,
                           alpha=SETTINGS.plot_trajectory_alpha,
                           start_timestamp=start_time)
-            fig_rpy.text(0., 0.005, "euler_angle_sequence: {}".format(
-                SETTINGS.euler_angle_sequence), fontsize=6)
+            if not SETTINGS.plot_usetex:
+                fig_rpy.text(0., 0.005, "euler_angle_sequence: {}".format(
+                    SETTINGS.euler_angle_sequence), fontsize=6)
 
         plot_collection.add_figure("trajectories", fig_traj)
         plot_collection.add_figure("xyz_view", fig_xyz)

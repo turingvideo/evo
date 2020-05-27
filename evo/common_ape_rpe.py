@@ -120,9 +120,14 @@ def plot(args, result, traj_ref, traj_est):
     # Plot the values color-mapped onto the trajectory.
     fig2 = plt.figure(figsize=SETTINGS.plot_figsize)
     ax = plot.prepare_axis(fig2, plot_mode)
+    if args.ros_map_yaml:
+        plot.ros_map(ax, args.ros_map_yaml, plot_mode)
+
     plot.traj(ax, plot_mode, traj_ref, style=SETTINGS.plot_reference_linestyle,
               color=SETTINGS.plot_reference_color, label='reference',
               alpha=SETTINGS.plot_reference_alpha)
+    plot.draw_coordinate_axes(ax, traj_ref, plot_mode,
+                              SETTINGS.plot_axis_marker_scale)
 
     if args.plot_colormap_min is None:
         args.plot_colormap_min = result.stats["min"]
@@ -136,6 +141,14 @@ def plot(args, result, traj_ref, traj_est):
                        plot_mode, min_map=args.plot_colormap_min,
                        max_map=args.plot_colormap_max,
                        title="Error mapped onto trajectory")
+    plot.draw_coordinate_axes(ax, traj_est, plot_mode,
+                              SETTINGS.plot_axis_marker_scale)
+    if SETTINGS.plot_pose_correspondences:
+        plot.draw_correspondence_edges(
+            ax, traj_est, traj_ref, plot_mode,
+            style=SETTINGS.plot_pose_correspondences_linestyle,
+            color=SETTINGS.plot_reference_color,
+            alpha=SETTINGS.plot_reference_alpha)
     fig2.axes.append(ax)
 
     plot_collection = plot.PlotCollection(result.info["title"])

@@ -142,14 +142,11 @@ class PosePath3D(object):
 
     def transform(self, t, right_mul=False, propagate=False):
         """
-        apply a left or right multiplicative SE(3) transformation to the whole path
-        :param t: a valid SE(3) matrix
+        apply a left or right multiplicative transformation to the whole path
+        :param t: a 4x4 transformation matrix (e.g. SE(3) or Sim(3))
         :param right_mul: whether to apply it right-multiplicative or not
         :param propagate: whether to propagate drift with RHS transformations
         """
-        if not lie.is_se3(t):
-            raise TrajectoryException(
-                "transformation is not a valid SE(3) matrix")
         if right_mul and not propagate:
             # Transform each pose individually.
             self._poses_se3 = [np.dot(p, t) for p in self.poses_se3]
@@ -393,12 +390,14 @@ def align_trajectory(traj, traj_ref, correct_scale=False,
         logger.debug("Aligning using Umeyama's method..." +
                      (" (with scale correction)" if with_scale else ""))
     if n == -1:
-        r_a, t_a, s = geometry.umeyama_alignment(
-            traj_aligned.positions_xyz.T, traj_ref.positions_xyz.T, with_scale)
+        r_a, t_a, s = geometry.umeyama_alignment(traj_aligned.positions_xyz.T,
+                                                 traj_ref.positions_xyz.T,
+                                                 with_scale)
     else:
         r_a, t_a, s = geometry.umeyama_alignment(
             traj_aligned.positions_xyz[:n, :].T,
             traj_ref.positions_xyz[:n, :].T, with_scale)
+
     if not correct_only_scale:
         logger.debug("Rotation of alignment:\n{}"
                      "\nTranslation of alignment:\n{}".format(r_a, t_a))

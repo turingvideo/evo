@@ -28,6 +28,8 @@ import context
 import helpers
 from evo.core import trajectory
 from evo.core import lie_algebra as lie
+from evo.core.trajectory import PoseTrajectory3D
+from evo.core.geometry import GeometryException
 
 
 class TestPosePath3D(unittest.TestCase):
@@ -92,6 +94,14 @@ class TestPosePath3D(unittest.TestCase):
         path_transformed.transform(t)
         # traj_transformed.transform(lie.se3_inverse(t))
         self.assertAlmostEqual(path_transformed.path_length, path.path_length)
+
+    def test_transform_sim3(self):
+        path = helpers.fake_path(10)
+        path_transformed = copy.deepcopy(path)
+        t = lie.sim3(r=lie.random_so3(), t=np.ones(3), s=1.234)
+        path_transformed.transform(t)
+        self.assertAlmostEqual(path_transformed.path_length,
+                               path.path_length * 1.234)
 
     def test_scale(self):
         path = helpers.fake_path(10)
@@ -185,6 +195,23 @@ class TestTrajectoryAlignment(unittest.TestCase):
         self.assertFalse(np.allclose(traj_1.poses_se3[0], traj_2.poses_se3[0]))
         traj_2 = trajectory.align_trajectory_origin(traj_2, traj_1)
         self.assertTrue(np.allclose(traj_1.poses_se3[0], traj_2.poses_se3[0]))
+
+    def test_alignment_degenerate_case(self):
+        length = 100
+        poses = [lie.random_se3()] * length
+        traj_1 = PoseTrajectory3D(
+            poses_se3=poses,
+            timestamps=helpers.fake_timestamps(length, 1, 0.0))
+        traj_2 = copy.deepcopy(traj_1)
+        traj_2.transform(lie.random_se3())
+        traj_2.scale(1.234)
+        self.assertNotEqual(traj_1, traj_2)
+
+        with self.assertRaises(GeometryException):
+            trajectory.align_trajectory(traj_1, traj_2)
+
+        with self.assertRaises(GeometryException):
+            trajectory.align_trajectory(traj_1, traj_2, correct_scale=True)
 
 
 if __name__ == '__main__':
