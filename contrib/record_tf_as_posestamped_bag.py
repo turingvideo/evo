@@ -76,7 +76,9 @@ class Recorder(object):
 def transformstamped_to_posestamped(transform_stamped):
     pose_stamped = PoseStamped()
     pose_stamped.header = transform_stamped.header
-    pose_stamped.pose.position = transform_stamped.transform.translation
+    pose_stamped.pose.position.x = transform_stamped.transform.translation.x
+    pose_stamped.pose.position.y = transform_stamped.transform.translation.y
+    pose_stamped.pose.position.z = 0.0
     pose_stamped.pose.orientation = transform_stamped.transform.rotation
     return pose_stamped
 
